@@ -101,19 +101,17 @@ class GroupSearchController(SearchController):
 
     @view_config(request_method='GET')
     def search(self):
+        # Redirect/raise if there is no read permission policy.
         result = self._check_access_permissions()
-        if result is not None:
+        if result:
             return result
-
+        # Redirect/raise if slug doesn't match the request.
         check_slug(self.group, self.request)
 
         result = super(GroupSearchController, self).search()
-
         result['opts'] = {'search_groupname': self.group.name}
 
-        # If the group has read access only for members  and the user is not in that list
-        # return without extra info.
-        if self.group.readable_by == ReadableBy.members and (self.request.user not in self.group.members):
+        if not self._user_has_read_permission():
             return result
 
         def user_annotation_count(aggregation, userid):
@@ -295,6 +293,15 @@ class GroupSearchController(SearchController):
     @view_config(request_param='toggle_tag_facet')
     def toggle_tag_facet(self):
         return _toggle_tag_facet(self.request)
+
+    def _user_has_read_permission(self):
+        """If the user has read permission return True, otherwise return False"""
+        # If the group has a list of members and the user isn't a member
+        # return False.
+        if (self.group.readable_by == ReadableBy.members
+                and (self.request.user not in self.group.members)):
+            return False
+        return True
 
     def _check_access_permissions(self):
         if not self.request.has_permission('read', self.group):
